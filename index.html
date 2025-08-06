@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>CatZap</title>
+  <style>
+    body { margin: 0; font-family: sans-serif; background: #0d0d0d; color: white; }
+    header { background: #1f1f1f; padding: 15px; font-size: 1.5em; text-align: center; }
+    nav { display: flex; background: #121212; flex-wrap: wrap; }
+    nav button { flex: 1; padding: 10px; border: none; background: #1a1a1a; color: white; cursor: pointer; }
+    nav .active { background: #333; }
+    #main { padding: 15px; height: calc(100vh - 170px); overflow-y: auto; }
+    .input-area { display: flex; border-top: 1px solid #333; }
+    .input-area input { flex: 1; padding: 10px; border: none; background: #1a1a1a; color: white; }
+    .input-area button { background: #4caf50; color: white; border: none; padding: 10px 15px; cursor: pointer; }
+    .msg, .task, .contact, .group { background: #2a2a2a; margin: 5px 0; padding: 10px; border-radius: 8px; }
+    .bot { background: #004d40; }
+    .done { text-decoration: line-through; color: #888; }
+  </style>
+</head>
+<body>
+
+<header>CatZap</header>
+
+<div style="padding:10px;" id="user-info">
+  <div id="login-area">
+    <input type="text" id="username" placeholder="Seu nome">
+    <button onclick="register()">Entrar</button>
+  </div>
+  <div id="welcome-area" style="display:none;">
+    Olá, <span id="name-display"></span> | Seu número: <span id="number-display"></span>
+  </div>
+</div>
+
+<div id="main">
+  <div id="chat-area"></div>
+  <div id="task-area" style="display:none;"></div>
+  <div id="work-area" style="display:none;"></div>
+  <div id="health-area" style="display:none;"></div>
+  <div id="profile-area" style="display:none;">
+    <h2>Meu Perfil</h2>
+    <p><strong>Nome:</strong> <span id="profile-name"></span></p>
+    <p><strong>Número:</strong> <span id="profile-number"></span></p>
+  </div>
+</div>
+
+<div class="input-area">
+  <input type="text" id="input-msg" placeholder="Digite sua mensagem ou tarefa...">
+  <button onclick="send()">Enviar</button>
+</div>
+
+<nav>
+  <button onclick="switchTab('chat')" class="active" id="tab-chat">Mensagens</button>
+  <button onclick="switchTab('task')" id="tab-task">Task Bot</button>
+  <button onclick="switchTab('work')" id="tab-work">Work</button>
+  <button onclick="switchTab('health')" id="tab-health">Health</button>
+  <button onclick="switchTab('profile')" id="tab-profile">Perfil</button>
+  <button onclick="addContact()">+Contato</button>
+  <button onclick="createGroup()">+Grupo</button>
+</nav>
+
+<script>
+  const tabs = ['chat', 'task', 'work', 'health', 'profile'];
+  let user = JSON.parse(localStorage.getItem("user") || "null");
+  let contacts = JSON.parse(localStorage.getItem("contacts") || "[]");
+  let messages = JSON.parse(localStorage.getItem("messages") || "[]");
+  let tasks = JSON.parse(localStorage.getItem("tasks") || "[]");
+  let groups = JSON.parse(localStorage.getItem("groups") || "[]");
+  let currentContact = null;
+
+  function register() {
+    const name = document.getElementById("username").value.trim();
+    if (!name) return alert("Digite seu nome");
+    const number = Date.now().toString().slice(-15);
+    user = { name, number };
+    localStorage.setItem("user", JSON.stringify(user));
+    document.getElementById("login-area").style.display = "none";
+    document.getElementById("welcome-area").style.display = "block";
+    document.getElementById("name-display").textContent = name;
+    document.getElementById("number-display").textContent = number;
+    renderMessages();
+  }
+
+  function switchTab(tab) {
+    tabs.forEach(t => {
+      document.getElementById(`${t}-area`).style.display = t === tab ? "block" : "none";
+      document.getElementById(`tab-${t}`)?.classList.remove("active");
+    });
+    document.getElementById(`tab-${tab}`)?.classList.add("active");
+    if (tab === "task" || tab === "work" || tab === "health") renderTasks();
+    if (tab === "profile") {
+      document.getElementById("profile-name").textContent = user.name;
+      document.getElementById("profile-number").textContent = user.number;
+    }
+  }
+
+  function send() {
+    const msg = document.getElementById("input-msg").value.trim();
+    if (!msg) return;
+    document.getElementById("input-msg").value = "";
+
+    const activeTab = tabs.find(t => document.getElementById(`${t}-area`).style.display === "block");
+
+    if (activeTab === "task") {
+      const isHealth = ["exercício", "médico", "saúde", "remédio", "alongamento"].some(k => msg.toLowerCase().includes(k));
+      tasks.push({ text: msg, type: isHealth ? "health" : "work", done: false });
+      localStorage.setItem("tasks", JSON.stringify(tasks));
+      renderTasks();
+    } else if (currentContact) {
+      messages.push({ from: user.name, to: currentContact.number, text: msg, time: Date.now() });
+      localStorage.setItem("messages", JSON.stringify(messages));
+      renderMessages();
+    }
+  }
+
+  function renderMessages() {
+    const div = document.getElementById("chat-area");
+    div.innerHTML = contacts.map(c => `
+      <div class="contact">
+        Contato: ${c.name} <button onclick='openChat("${c.number}")'>Chat</button>
+      </div>`).join("");
+    div.innerHTML += groups.map(g => `<div class="group">Grupo: ${g.name}</div>`).join("");
+    if (currentContact) {
+      const chat = messages.filter(m => (m.to === currentContact.number && m.from === user.name) || (m.from === currentContact.name && m.to === user.number));
+      div.innerHTML += chat.map(m => `<div class="msg"><strong>${m.from}:</strong> ${m.text}</div>`).join("");
+    }
+  }
+
+  function renderTasks() {
+    document.getElementById("task-area").innerHTML = tasks.map((t, i) => `
+      <div class="task ${t.done ? 'done' : ''}">${t.text}
+        <button onclick="markDone(${i})">✔</button>
+      </div>`).join("");
+    document.getElementById("work-area").innerHTML = tasks.filter(t => t.type === "work").map(t => `<div class="task">${t.text}</div>`).join("");
+    document.getElementById("health-area").innerHTML = tasks.filter(t => t.type === "health").map(t => `<div class="task">${t.text}</div>`).join("");
+  }
+
+  function markDone(i) {
+    tasks[i].done = true;
+    localStorage.setItem("tasks", JSON.stringify(tasks));
+    renderTasks();
+  }
+
+  function addContact() {
+    const number = prompt("Digite o número do contato (15 dígitos):");
+    if (!/^[0-9]{15}$/.test(number)) return alert("Número inválido");
+    const name = prompt("Nome do contato:");
+    if (!name) return;
+    contacts.push({ number, name });
+    localStorage.setItem("contacts", JSON.stringify(contacts));
+    renderMessages();
+  }
+
+  function createGroup() {
+    const name = prompt("Nome do grupo:");
+    if (!name) return;
+    const members = [user.name];
+    groups.push({ name, members });
+    localStorage.setItem("groups", JSON.stringify(groups));
+    renderMessages();
+  }
+
+  function openChat(number) {
+    currentContact = contacts.find(c => c.number === number);
+    renderMessages();
+  }
+
+  if (user) {
+    document.getElementById("login-area").style.display = "none";
+    document.getElementById("welcome-area").style.display = "block";
+    document.getElementById("name-display").textContent = user.name;
+    document.getElementById("number-display").textContent = user.number;
+    renderMessages();
+  }
+</script>
+
+</body>
+</html>
